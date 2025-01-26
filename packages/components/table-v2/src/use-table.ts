@@ -1,5 +1,14 @@
-import { computed, ref, shallowRef, toRef, unref, watch } from 'vue'
-import { isArray } from '@element-plus/utils'
+import {
+  computed,
+  getCurrentInstance,
+  ref,
+  shallowRef,
+  toRef,
+  unref,
+  watch,
+} from 'vue'
+import { isArray, isNumber } from '@element-plus/utils'
+import { useNamespace } from '@element-plus/hooks'
 import {
   useColumns,
   useData,
@@ -43,14 +52,18 @@ function useTable(props: TableV2Props) {
     onMaybeEndReached,
   })
 
+  const ns = useNamespace('table-v2')
+  const instance = getCurrentInstance()!
+
+  // state
+  const isScrolling = shallowRef(false)
+
   const {
     expandedRowKeys,
-    hoveringRowKey,
     lastRenderedRowIndex,
     isDynamic,
     isResetting,
     rowHeights,
-
     resetAfterIndex,
     onRowExpanded,
     onRowHeightChange,
@@ -60,14 +73,29 @@ function useTable(props: TableV2Props) {
     mainTableRef,
     leftTableRef,
     rightTableRef,
-
-    onMaybeEndReached,
+    tableInstance: instance,
+    ns,
+    isScrolling,
   })
 
   const { data, depthMap } = useData(props, {
     expandedRowKeys,
     lastRenderedRowIndex,
     resetAfterIndex,
+  })
+
+  const rowsHeight = computed(() => {
+    const { estimatedRowHeight, rowHeight } = props
+    const _data = unref(data)
+    if (isNumber(estimatedRowHeight)) {
+      // calculate the actual height
+      return Object.values(unref(rowHeights)).reduce(
+        (acc, curr) => acc + curr,
+        0
+      )
+    }
+
+    return _data.length * rowHeight
   })
 
   const {
@@ -77,19 +105,17 @@ function useTable(props: TableV2Props) {
     leftTableWidth,
     rightTableWidth,
     headerWidth,
-    rowsHeight,
     windowHeight,
     footerHeight,
     emptyStyle,
     rootStyle,
+    headerHeight,
   } = useStyles(props, {
     columnsTotalWidth,
-    data,
     fixedColumnsOnLeft,
     fixedColumnsOnRight,
+    rowsHeight,
   })
-  // state
-  const isScrolling = shallowRef(false)
 
   // DOM/Component refs
   const containerRef = ref()
@@ -126,7 +152,7 @@ function useTable(props: TableV2Props) {
 
     if (
       unref(lastRenderedRowIndex) >= 0 &&
-      _totalHeight !== unref(rowsHeight)
+      _totalHeight === scrollTop + unref(mainTableHeight) - unref(headerHeight)
     ) {
       onEndReached(heightUntilEnd)
     }
@@ -153,7 +179,6 @@ function useTable(props: TableV2Props) {
     isDynamic,
     isResetting,
     isScrolling,
-    hoveringRowKey,
     hasFixedColumns,
     // records
     columnsStyles,

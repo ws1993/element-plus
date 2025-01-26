@@ -29,15 +29,53 @@ describe('PageHeader.vue', () => {
     expect(wrapper.find('.el-page-header__icon').text()).toEqual(AXIOM)
   })
 
-  test('slot content', () => {
-    const wrapper = mount(() => (
-      <PageHeader
-        v-slots={{
-          content: () => AXIOM,
-        }}
-      />
-    ))
-    expect(wrapper.find('.el-page-header__content').text()).toEqual(AXIOM)
+  describe('slots', () => {
+    test('content', () => {
+      const wrapper = mount(() => (
+        <PageHeader
+          v-slots={{
+            content: () => AXIOM,
+          }}
+        />
+      ))
+      expect(wrapper.find('.el-page-header__content').text()).toEqual(AXIOM)
+    })
+
+    test('breadcrumb', () => {
+      const wrapper = mount(() => (
+        <PageHeader
+          v-slots={{
+            breadcrumb: () => AXIOM,
+          }}
+        />
+      ))
+      expect(wrapper.find('.el-page-header__breadcrumb').exists()).toBe(true)
+      expect(wrapper.classes()).toContain('el-page-header--has-breadcrumb')
+    })
+
+    test('extra', () => {
+      const wrapper = mount(() => (
+        <PageHeader
+          v-slots={{
+            extra: () => AXIOM,
+          }}
+        />
+      ))
+      expect(wrapper.find('.el-page-header__extra').exists()).toBe(true)
+      expect(wrapper.classes()).toContain('el-page-header--has-extra')
+    })
+
+    test('default', () => {
+      const wrapper = mount(() => (
+        <PageHeader
+          v-slots={{
+            default: () => AXIOM,
+          }}
+        />
+      ))
+      expect(wrapper.find('.el-page-header__main').exists()).toBe(true)
+      expect(wrapper.classes()).toContain('is-contentful')
+    })
   })
 
   test('prop title', () => {
@@ -54,6 +92,44 @@ describe('PageHeader.vue', () => {
       />
     ))
     expect(wrapper.find('.el-page-header__title').text()).toEqual(AXIOM)
+  })
+
+  test('conditional slots rendering', async () => {
+    const wrapper = mount(
+      (props: {
+        showDefault: boolean
+        showBreadcrumb: boolean
+        showExtra: boolean
+      }) => (
+        <PageHeader
+          v-slots={{
+            default: props.showDefault ? () => AXIOM : undefined,
+            breadcrumb: props.showBreadcrumb ? () => AXIOM : undefined,
+            extra: props.showExtra ? () => AXIOM : undefined,
+          }}
+        />
+      ),
+      {
+        props: {
+          showDefault: false,
+          showBreadcrumb: false,
+          showExtra: false,
+        },
+      }
+    )
+    expect(wrapper.classes()).not.toContain('is-contentful')
+    expect(wrapper.classes()).not.toContain('el-page-header--has-breadcrumb')
+    expect(wrapper.classes()).not.toContain('el-page-header--has-extra')
+
+    await wrapper.setProps({
+      showDefault: true,
+      showBreadcrumb: true,
+      showExtra: true,
+    })
+
+    expect(wrapper.classes()).toContain('is-contentful')
+    expect(wrapper.classes()).toContain('el-page-header--has-breadcrumb')
+    expect(wrapper.classes()).toContain('el-page-header--has-extra')
   })
 
   test('event back', async () => {

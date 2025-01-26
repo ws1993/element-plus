@@ -160,14 +160,6 @@ describe('table column', () => {
       wrapper.unmount()
     })
 
-    it('show-tooltip-when-overflow', async () => {
-      // old version prop name
-      const wrapper = createTable('show-tooltip-when-overflow')
-      await doubleWait()
-      expect(wrapper.findAll('.el-tooltip').length).toEqual(5)
-      wrapper.unmount()
-    })
-
     it('align', async () => {
       const wrapper = createTable(
         'align="left"',
@@ -268,9 +260,8 @@ describe('table column', () => {
       }
 
       describe('= selection', () => {
-        const wrapper = createTable('selection')
-
         it('render', async () => {
+          const wrapper = createTable('selection')
           await doubleWait()
           expect(wrapper.findAll('.el-checkbox').length).toEqual(
             getTestData().length + 1
@@ -278,6 +269,8 @@ describe('table column', () => {
         })
 
         it('select all', async () => {
+          const wrapper = createTable('selection')
+          await doubleWait()
           wrapper.find('.el-checkbox').trigger('click')
           await doubleWait()
           expect(wrapper.vm.selected.length).toEqual(5)
@@ -285,15 +278,65 @@ describe('table column', () => {
         })
 
         it('select one', async () => {
-          const wrapper2 = createTable('selection')
+          const wrapper = createTable('selection')
 
           await doubleWait()
-          wrapper2.findAll('.el-checkbox')[1].trigger('click')
+          wrapper.findAll('.el-checkbox')[1].trigger('click')
 
           await doubleWait()
-          expect(wrapper2.vm.selected.length).toEqual(1)
-          expect(wrapper2.vm.selected[0].name).toEqual(getTestData()[0].name)
-          wrapper2.unmount()
+          expect(wrapper.vm.selected.length).toEqual(1)
+          expect(wrapper.vm.selected[0].name).toEqual(getTestData()[0].name)
+          wrapper.unmount()
+        })
+
+        // #19581
+        it('The index parameters of the selectable function should be the same as the index of the row', async () => {
+          const expectIndexs = []
+          const actualIndexs = []
+          const wrapper = mount({
+            components: {
+              ElTable,
+              ElTableColumn,
+            },
+            template: `
+          <el-table :data="testData" @selection-change="change">
+            <el-table-column type="selection" :selectable="selectableFn" />
+            <el-table-column prop="desc" />
+          </el-table>`,
+
+            data() {
+              return {
+                selected: [],
+                testData: [
+                  { id: 0, desc: 'record 1' },
+                  { id: 1, desc: 'record 2' },
+                  { id: 2, desc: 'record 3' },
+                ],
+              }
+            },
+            methods: {
+              change(rows) {
+                this.selected = rows
+              },
+              selectableFn(row, index) {
+                const expectIndex = this.testData.findIndex(
+                  (item) => item.id === row.id
+                )
+                expectIndexs.push(expectIndex)
+                actualIndexs.push(index)
+                return true
+              },
+            },
+          })
+          await doubleWait()
+
+          wrapper.findAll('.el-table__row .el-checkbox').forEach((checkbox) => {
+            checkbox.trigger('click')
+          })
+          await doubleWait()
+
+          expect(expectIndexs).toEqual(actualIndexs)
+          expect(wrapper.vm.selected.length).toBe(wrapper.vm.testData.length)
         })
       })
 
@@ -701,6 +744,68 @@ describe('table column', () => {
       wrapper.unmount()
     })
 
+    it('should work with fixed', async () => {
+      const wrapper = mount({
+        components: {
+          ElTable,
+          ElTableColumn,
+        },
+        template: `
+          <el-table :data="testData">
+            <el-table-column prop="name" />
+            <el-table-column label="group" fixed="left">
+              <el-table-column label="group's group">
+                <el-table-column prop="runtime" width="100" fixed="right"/>
+                <el-table-column prop="director" width="100" fixed="right"/>
+              </el-table-column>
+              <el-table-column prop="director"/>
+            </el-table-column>
+            <el-table-column prop="director"/>
+            <el-table-column prop="runtime"/>
+            <el-table-column label="group2" fixed="right">
+              <el-table-column prop="runtime" width="100" fixed="left"/>
+              <el-table-column prop="director" width="50"/>
+            </el-table-column>
+            <el-table-column prop="runtime"/>
+          </el-table>
+        `,
+
+        created() {
+          this.testData = getTestData()
+        },
+      })
+
+      await doubleWait()
+      const lfhcolumns = wrapper
+        .findAll('.el-table__header tr')
+        .map((item) => item.findAll('.el-table-fixed-column--left'))
+      const lfbcolumns = wrapper.findAll(
+        '.el-table__body .el-table-fixed-column--left'
+      )
+      const rfhcolumns = wrapper
+        .findAll('.el-table__header tr')
+        .map((item) => item.findAll('.el-table-fixed-column--right'))
+      const rfbcolumns = wrapper.findAll(
+        '.el-table__body .el-table-fixed-column--right'
+      )
+      expect(lfbcolumns).toHaveLength(15)
+      expect(rfbcolumns).toHaveLength(10)
+      expect(lfhcolumns.at(0).at(0).classes()).toContain('is-last-column')
+      expect(lfhcolumns.at(1).at(1).classes()).toContain('is-last-column')
+      expect(getComputedStyle(lfhcolumns.at(1).at(1).element).left).toBe(
+        '200px'
+      )
+      expect(getComputedStyle(lfhcolumns.at(2).at(1).element).left).toBe(
+        '100px'
+      )
+      expect(rfhcolumns.at(0).at(0).classes()).toContain('is-first-column')
+      expect(rfhcolumns.at(1).at(0).classes()).toContain('is-first-column')
+      expect(getComputedStyle(rfhcolumns.at(1).at(0).element).right).toBe(
+        '50px'
+      )
+      wrapper.unmount()
+    })
+
     it('el-table-column should callback itself', async () => {
       const TableColumn = {
         name: 'TableColumn',
@@ -1067,8 +1172,9 @@ describe('table column', () => {
         },
         template: `
           <el-table :data="testData">
-            <el-table-column :fixed="fixed" />
-            <el-table-column prop="release" />
+            <el-table-column :fixed="selectFixed" type="selection" />
+            <el-table-column :fixed="fixed" prop="name" />
+            <el-table-column :fixed="fixed" prop="release" />
             <el-table-column prop="director" />
             <el-table-column prop="runtime" />
           </el-table>
@@ -1076,6 +1182,7 @@ describe('table column', () => {
 
         data() {
           return {
+            selectFixed: false,
             fixed: false,
           }
         },
@@ -1085,11 +1192,56 @@ describe('table column', () => {
         },
       })
 
-      await doubleWait()
-      expect(wrapper.find('.el-table-fixed-column--left').exists()).toBeFalsy()
+      const rowLength = wrapper.vm.testData.length + 1 // include header
+      const dynamicFixCols = 2
+
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(0)
       wrapper.vm.fixed = true
       await doubleWait()
-      expect(wrapper.find('.el-table-fixed-column--left').exists()).toBeTruthy()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(
+        rowLength * (dynamicFixCols + 1)
+      )
+      wrapper.vm.fixed = false
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(0)
+
+      wrapper.vm.selectFixed = true
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(
+        rowLength
+      )
+      wrapper.vm.fixed = true
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(
+        rowLength * (dynamicFixCols + 1)
+      )
+      wrapper.vm.fixed = false
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(
+        rowLength
+      )
+
+      wrapper.vm.selectFixed = 'right'
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(0)
+      expect(wrapper.findAll('.el-table-fixed-column--right').length).toEqual(
+        rowLength
+      )
+      wrapper.vm.fixed = true
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(
+        rowLength * dynamicFixCols
+      )
+      expect(wrapper.findAll('.el-table-fixed-column--right').length).toEqual(
+        rowLength
+      )
+      wrapper.vm.fixed = false
+      await doubleWait()
+      expect(wrapper.findAll('.el-table-fixed-column--left').length).toEqual(0)
+      expect(wrapper.findAll('.el-table-fixed-column--right').length).toEqual(
+        rowLength
+      )
+
       wrapper.unmount()
     })
 

@@ -1,15 +1,14 @@
-import { createVNode, render } from 'vue'
-import { isClient } from '@vueuse/core'
+import { createVNode, isVNode, render } from 'vue'
 import {
   debugWarn,
+  isBoolean,
+  isClient,
   isElement,
   isFunction,
   isNumber,
   isString,
-  isVNode,
 } from '@element-plus/utils'
-import { useZIndex } from '@element-plus/hooks'
-import { messageConfig } from '@element-plus/components/config-provider/src/config-provider'
+import { messageConfig } from '@element-plus/components/config-provider'
 import MessageConstructor from './message.vue'
 import { messageDefaults, messageTypes } from './message'
 import { instances } from './instance'
@@ -20,7 +19,6 @@ import type {
   Message,
   MessageFn,
   MessageHandler,
-  MessageInstance,
   MessageOptions,
   MessageParams,
   MessageParamsNormalized,
@@ -42,7 +40,9 @@ const normalizeOptions = (params?: MessageParams) => {
     ...options,
   }
 
-  if (isString(normalized.appendTo)) {
+  if (!normalized.appendTo) {
+    normalized.appendTo = document.body
+  } else if (isString(normalized.appendTo)) {
     let appendTo = document.querySelector<HTMLElement>(normalized.appendTo)
 
     // should fallback to default value with a warning
@@ -55,6 +55,22 @@ const normalizeOptions = (params?: MessageParams) => {
     }
 
     normalized.appendTo = appendTo
+  }
+
+  // When grouping is configured globally,
+  // if grouping is manually set when calling message individually and it is not equal to the default value,
+  // the global configuration cannot override the current setting. default => false
+  if (isBoolean(messageConfig.grouping) && !normalized.grouping) {
+    normalized.grouping = messageConfig.grouping
+  }
+  if (isNumber(messageConfig.duration) && normalized.duration === 3000) {
+    normalized.duration = messageConfig.duration
+  }
+  if (isNumber(messageConfig.offset) && normalized.offset === 16) {
+    normalized.offset = messageConfig.offset
+  }
+  if (isBoolean(messageConfig.showClose) && !normalized.showClose) {
+    normalized.showClose = messageConfig.showClose
   }
 
   return normalized as MessageParamsNormalized
@@ -73,8 +89,6 @@ const createMessage = (
   { appendTo, ...options }: MessageParamsNormalized,
   context?: AppContext | null
 ): MessageContext => {
-  const { nextZIndex } = useZIndex()
-
   const id = `message_${seed++}`
   const userOnClose = options.onClose
 
@@ -82,7 +96,8 @@ const createMessage = (
 
   const props = {
     ...options,
-    zIndex: options.zIndex ?? nextZIndex(),
+    // now the zIndex will be used inside the message.vue component instead of here.
+    // zIndex: nextIndex() + options.zIndex
     id,
     onClose: () => {
       userOnClose?.()
@@ -101,7 +116,11 @@ const createMessage = (
     MessageConstructor,
     props,
     isFunction(props.message) || isVNode(props.message)
-      ? { default: props.message }
+      ? {
+          default: isFunction(props.message)
+            ? props.message
+            : () => props.message,
+        }
       : null
   )
   vnode.appContext = context || message._context
@@ -110,14 +129,13 @@ const createMessage = (
   // instances will remove this item when close function gets called. So we do not need to worry about it.
   appendTo.appendChild(container.firstElementChild!)
 
-  const vm = vnode.component!.proxy as MessageInstance
+  const vm = vnode.component!
+
   const handler: MessageHandler = {
     // instead of calling the onClose function directly, setting this value so that we can have the full lifecycle
     // for out component, so that all closing steps will not be skipped.
     close: () => {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore `visible` from defineExpose
-      vm.visible = false
+      vm.exposed!.visible.value = false
     },
   }
 
@@ -139,10 +157,6 @@ const message: MessageFn &
 ) => {
   if (!isClient) return { close: () => undefined }
 
-  if (isNumber(messageConfig.max) && instances.length >= messageConfig.max) {
-    return { close: () => undefined }
-  }
-
   const normalized = normalizeOptions(options)
 
   if (normalized.grouping && instances.length) {
@@ -154,6 +168,10 @@ const message: MessageFn &
       instance.props.type = normalized.type
       return instance.handler
     }
+  }
+
+  if (isNumber(messageConfig.max) && instances.length >= messageConfig.max) {
+    return { close: () => undefined }
   }
 
   const instance = createMessage(normalized, context)
