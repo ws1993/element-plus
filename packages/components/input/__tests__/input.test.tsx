@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, test, vi } from 'vitest'
@@ -6,7 +5,8 @@ import defineGetter from '@element-plus/test-utils/define-getter'
 import { ElFormItem as FormItem } from '@element-plus/components/form'
 import Input from '../src/input.vue'
 import type { CSSProperties } from 'vue'
-import type { InputAutoSize, InputInstance, InputProps } from '../src/input'
+import type { InputAutoSize, InputProps } from '../src/input'
+import type { InputInstance } from '../src/instance'
 
 describe('Input.vue', () => {
   afterEach(() => {
@@ -18,7 +18,6 @@ describe('Input.vue', () => {
     const handleFocus = vi.fn()
     const wrapper = mount(() => (
       <Input
-        // @ts-expect-error native attribute
         minlength={3}
         maxlength={5}
         placeholder="请输入内容"
@@ -49,10 +48,15 @@ describe('Input.vue', () => {
     expect(inputElm.element.value).toBe('')
   })
 
-  test('disabled', () => {
+  test('disabled', async () => {
     const wrapper = mount(() => <Input disabled />)
     const inputElm = wrapper.find('input')
     expect(inputElm.element.disabled).not.toBeNull()
+
+    // trigger click should not focus #18012
+    inputElm.trigger('click')
+    await nextTick()
+    expect(inputElm.element.className.includes('is-focus')).toBe(false)
   })
 
   describe('test emoji', () => {
@@ -61,7 +65,6 @@ describe('Input.vue', () => {
       const wrapper = mount(() => (
         <Input
           class="test-exceed"
-          // @ts-expect-error native html attribute
           maxlength="4"
           showWordLimit
           v-model={inputVal.value}
@@ -74,17 +77,17 @@ describe('Input.vue', () => {
 
       const elCount = wrapper.find('.el-input__count-inner')
       expect(elCount.exists()).toBe(true)
-      expect(elCount.text()).toMatchInlineSnapshot(`"3 / 4"`)
+      expect(elCount.text()).toMatchInlineSnapshot(`"4 / 4"`)
 
       inputVal.value = '1👌3😄'
       await nextTick()
       expect(nativeInput.value).toMatchInlineSnapshot(`"1👌3😄"`)
-      expect(elCount.text()).toMatchInlineSnapshot(`"4 / 4"`)
+      expect(elCount.text()).toMatchInlineSnapshot(`"6 / 4"`)
 
       inputVal.value = '哈哈1👌3😄'
       await nextTick()
       expect(nativeInput.value).toMatchInlineSnapshot(`"哈哈1👌3😄"`)
-      expect(elCount.text()).toMatchInlineSnapshot(`"6 / 4"`)
+      expect(elCount.text()).toMatchInlineSnapshot(`"8 / 4"`)
       expect(Array.from(vm.$el.classList)).toMatchInlineSnapshot(`
         [
           "el-input",
@@ -99,7 +102,6 @@ describe('Input.vue', () => {
       const wrapper = mount(() => (
         <Input
           type="textarea"
-          // @ts-expect-error native html attribute
           maxlength="4"
           showWordLimit
           v-model={inputVal.value}
@@ -112,12 +114,12 @@ describe('Input.vue', () => {
 
       const elCount = wrapper.find('.el-input__count')
       expect(elCount.exists()).toBe(true)
-      expect(elCount.text()).toMatchInlineSnapshot(`"3 / 4"`)
+      expect(elCount.text()).toMatchInlineSnapshot(`"4 / 4"`)
 
       inputVal.value = '哈哈1👌3😄'
       await nextTick()
       expect(nativeInput.value).toMatchInlineSnapshot(`"哈哈1👌3😄"`)
-      expect(elCount.text()).toMatchInlineSnapshot(`"6 / 4"`)
+      expect(elCount.text()).toMatchInlineSnapshot(`"8 / 4"`)
       expect(Array.from(vm.$el.classList)).toMatchInlineSnapshot(`
         [
           "el-textarea",
@@ -150,13 +152,9 @@ describe('Input.vue', () => {
   })
 
   test('rows', () => {
-    const wrapper = mount(() => (
-      <Input
-        type="textarea"
-        // @ts-expect-error native html attribute
-        rows={3}
-      />
-    ))
+    const wrapper = mount(() => {
+      return <Input type="textarea" rows={3} />
+    })
     expect(wrapper.find('textarea').element.rows).toEqual(3)
   })
 
@@ -205,7 +203,6 @@ describe('Input.vue', () => {
           class="test-text"
           type="text"
           v-model={input1.value}
-          // @ts-expect-error native html attribute
           maxlength="10"
           showWordLimit={show.value}
         />
@@ -213,7 +210,6 @@ describe('Input.vue', () => {
           class="test-textarea"
           type="textarea"
           v-model={input2.value}
-          // @ts-expect-error native html attribute
           maxlength="10"
           showWordLimit
         />
@@ -221,7 +217,6 @@ describe('Input.vue', () => {
           class="test-password"
           type="password"
           v-model={input3.value}
-          // @ts-expect-error native html attribute
           maxlength="10"
           showWordLimit
         />
@@ -229,7 +224,6 @@ describe('Input.vue', () => {
           class="test-initial-exceed"
           type="text"
           v-model={input4.value}
-          // @ts-expect-error native html attribute
           maxlength="2"
           showWordLimit
         />
@@ -280,8 +274,12 @@ describe('Input.vue', () => {
     ))
 
     const vm = wrapper.vm
-    expect(vm.$el.querySelector('input').value).toEqual('10000')
+    const event = new Event('input', { bubbles: true })
+    expect(vm.$el.querySelector('input').value).toEqual('10,000')
     expect(vm.$el.querySelector('input').value).not.toEqual('1000')
+    vm.$el.querySelector('input').value = '1,000,000'
+    vm.$el.querySelector('input').dispatchEvent(event)
+    expect(val.value).toEqual('1000000')
   })
 
   describe('Input Methods', () => {
@@ -339,21 +337,67 @@ describe('Input.vue', () => {
     const handleFocus = vi.fn()
     const handleBlur = vi.fn()
 
-    test('event:focus & blur', async () => {
+    test('event:focus', async () => {
       const content = ref('')
       const wrapper = mount(() => (
         <Input
           placeholder="请输入内容"
           modelValue={content.value}
           onFocus={handleFocus}
-          onBlur={handleBlur}
         />
       ))
 
       const input = wrapper.find('input')
 
       await input.trigger('focus')
-      expect(handleFocus).toBeCalled()
+      expect(handleFocus).toHaveBeenCalledOnce()
+    })
+
+    test('event:blur', async () => {
+      const content = ref('')
+      const wrapper = mount(() => (
+        <Input
+          placeholder="请输入内容"
+          modelValue={content.value}
+          onBlur={handleBlur}
+        />
+      ))
+
+      const input = wrapper.find('input')
+
+      await input.trigger('blur')
+      expect(handleBlur).toHaveBeenCalledOnce()
+    })
+
+    test('textarea & event:focus', async () => {
+      const content = ref('')
+      const wrapper = mount(() => (
+        <Input
+          type="textarea"
+          placeholder="请输入内容"
+          modelValue={content.value}
+          onFocus={handleFocus}
+        />
+      ))
+
+      const input = wrapper.find('textarea')
+
+      await input.trigger('focus')
+      expect(handleFocus).toHaveBeenCalledOnce()
+    })
+
+    test('textarea & event:blur', async () => {
+      const content = ref('')
+      const wrapper = mount(() => (
+        <Input
+          type="textarea"
+          placeholder="请输入内容"
+          modelValue={content.value}
+          onBlur={handleBlur}
+        />
+      ))
+
+      const input = wrapper.find('textarea')
 
       await input.trigger('blur')
       expect(handleBlur).toBeCalled()
@@ -505,6 +549,30 @@ describe('Input.vue', () => {
     await icon.trigger('click')
     const d0 = icon.find('path').element.getAttribute('d')
     expect(d !== d0).toBeTruthy()
+  })
+
+  test('show / hide password', async () => {
+    const password = ref('123456')
+    const wrapper = mount(() => (
+      <Input type="password" modelValue={password.value} show-password />
+    ))
+
+    const icon = wrapper.find('.el-input__icon.el-input__password')
+    const input = wrapper.find('input')
+
+    expect(input.element.value).toBe('123456')
+    expect(input.element.selectionStart).toBe(6)
+    expect(input.element.selectionEnd).toBe(6)
+
+    await icon.trigger('click')
+    expect(input.element.value).toBe('123456')
+    expect(input.element.selectionStart).toBe(6)
+    expect(input.element.selectionEnd).toBe(6)
+
+    await input.element.setSelectionRange(1, 4)
+    await icon.trigger('click')
+    expect(input.element.selectionStart).toBe(1)
+    expect(input.element.selectionEnd).toBe(4)
   })
 
   describe('form item accessibility integration', () => {

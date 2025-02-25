@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { onBeforeUnmount, onMounted, onUpdated, shallowRef, watch } from 'vue'
-import { off, on } from '@element-plus/utils'
+import { onMounted, onUpdated, shallowRef, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { EVENT_CODE } from '@element-plus/constants'
 import { useNamespace } from '@element-plus/hooks'
 import type TreeStore from './tree-store'
@@ -19,11 +19,6 @@ export function useKeydown({ el$ }: UseKeydownOption, store: Ref<TreeStore>) {
 
   onMounted(() => {
     initTabIndex()
-    on(el$.value, 'keydown', handleKeydown)
-  })
-
-  onBeforeUnmount(() => {
-    off(el$.value, 'keydown', handleKeydown)
   })
 
   onUpdated(() => {
@@ -104,11 +99,18 @@ export function useKeydown({ el$ }: UseKeydownOption, store: Ref<TreeStore>) {
     const hasInput = currentItem.querySelector(
       '[type="checkbox"]'
     ) as Nullable<HTMLInputElement>
-    if ([EVENT_CODE.enter, EVENT_CODE.space].includes(code) && hasInput) {
+    if (
+      [EVENT_CODE.enter, EVENT_CODE.numpadEnter, EVENT_CODE.space].includes(
+        code
+      ) &&
+      hasInput
+    ) {
       ev.preventDefault()
       hasInput.click()
     }
   }
+
+  useEventListener(el$, 'keydown', handleKeydown)
 
   const initTabIndex = (): void => {
     treeItems.value = Array.from(

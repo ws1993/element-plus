@@ -1,6 +1,3 @@
-// @ts-nocheck
-import type { Nullable } from '../typescript'
-
 const FOCUSABLE_ELEMENT_SELECTORS = `a[href],button:not([disabled]),button:not([hidden]),:not([tabindex="-1"]),input:not([disabled]),input:not([type="hidden"]),select:not([disabled]),textarea:not([disabled])`
 
 /**
@@ -34,8 +31,11 @@ export const isFocusable = (element: HTMLElement): boolean => {
   ) {
     return true
   }
-  // HTMLButtonElement has disabled
-  if ((element as HTMLButtonElement).disabled) {
+  if (
+    element.tabIndex < 0 ||
+    element.hasAttribute('disabled') ||
+    element.getAttribute('aria-disabled') === 'true'
+  ) {
     return false
   }
 
@@ -114,7 +114,7 @@ export const getSibling = (
   el: HTMLElement,
   distance: number,
   elClass: string
-): Nullable<Element> => {
+) => {
   const { parentNode } = el
   if (!parentNode) return null
   const siblings = parentNode.querySelectorAll(elClass)
@@ -122,7 +122,7 @@ export const getSibling = (
   return siblings[index + distance] || null
 }
 
-export const focusNode = (el) => {
+export const focusNode = (el: HTMLElement) => {
   if (!el) return
   el.focus()
   !isLeaf(el) && el.click()
