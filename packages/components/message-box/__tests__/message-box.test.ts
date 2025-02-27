@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { markRaw } from 'vue'
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, test } from 'vitest'
+import { afterEach, describe, expect, it, test, vi } from 'vitest'
 import { rAF } from '@element-plus/test-utils/tick'
 import { triggerNativeCompositeClick } from '@element-plus/test-utils/composite-click'
 import { QuestionFilled as QuestionFilledIcon } from '@element-plus/icons-vue'
@@ -10,6 +10,10 @@ import { ElMessageBox } from '..'
 
 const selector = '.el-overlay'
 const QuestionFilled = markRaw(QuestionFilledIcon)
+
+vi.mock('@element-plus/utils/error', () => ({
+  debugWarn: vi.fn(),
+}))
 
 const _mount = (invoker: () => void) => {
   return mount(
@@ -28,6 +32,7 @@ const _mount = (invoker: () => void) => {
 describe('MessageBox', () => {
   afterEach(async () => {
     MessageBox.close()
+    document.body.innerHTML = ''
     await rAF()
   })
 
@@ -142,6 +147,19 @@ describe('MessageBox', () => {
     await rAF()
     const msgbox: HTMLElement = document.querySelector(selector)
     expect(msgbox).toBe(null)
+  })
+
+  test('autofocus', async () => {
+    MessageBox.alert('这是一段内容', {
+      autofocus: false,
+      title: '标题名称',
+    })
+    await rAF()
+    const btnElm = document.querySelector(
+      '.el-message-box__btns .el-button--primary'
+    )
+    const haveFocus = btnElm.isSameNode(document.activeElement)
+    expect(haveFocus).toBe(false)
   })
 
   test('prompt', async () => {
@@ -262,6 +280,52 @@ describe('MessageBox', () => {
     })
   })
 
+  describe('append to', () => {
+    it('should append to body if parameter is not provided', () => {
+      MessageBox({
+        title: 'append to test',
+        message: 'append to test',
+      })
+      const msgbox: HTMLElement = document.querySelector(`body > ${selector}`)
+      expect(msgbox).toBeDefined()
+    })
+
+    it('should append to body if element does not exist', () => {
+      MessageBox({
+        title: 'append to test',
+        message: 'append to test',
+        appendTo: '.not-existing-selector',
+      })
+      const msgbox: HTMLElement = document.querySelector(`body > ${selector}`)
+      expect(msgbox).toBeDefined()
+    })
+
+    it('should append to HtmlElement provided', () => {
+      const htmlElement = document.createElement('div')
+      document.body.appendChild(htmlElement)
+      MessageBox({
+        title: 'append to test',
+        message: 'append to test',
+        appendTo: htmlElement,
+      })
+      const msgbox: HTMLElement = htmlElement.querySelector(selector)
+      expect(msgbox).toBeDefined()
+    })
+
+    it('should append to selector provided', () => {
+      const htmlElement = document.createElement('div')
+      htmlElement.className = 'custom-html-element'
+      document.body.appendChild(htmlElement)
+      MessageBox({
+        title: 'append to test',
+        message: 'append to test',
+        appendTo: '.custom-html-element',
+      })
+      const msgbox: HTMLElement = htmlElement.querySelector(selector)
+      expect(msgbox).toBeDefined()
+    })
+  })
+
   describe('accessibility', () => {
     test('title attribute should set aria-label', async () => {
       const title = 'Hello World'
@@ -307,6 +371,31 @@ describe('MessageBox', () => {
       expect(msgboxDialog.getAttribute('aria-describedby')).toBeFalsy()
       expect(label.getAttribute('for')).toBe(input.getAttribute('id'))
       expect(label.textContent).toBe(message)
+    })
+
+    test('prompt inputValidator error message', async () => {
+      const message = '这是一段内容'
+
+      const inputValidator = vi.fn(() => {
+        return 'error message'
+      })
+
+      MessageBox.prompt(message, {
+        type: 'success',
+        inputValidator,
+      })
+      await rAF()
+      const msgbox: HTMLElement = document.querySelector(selector)!
+      const confirmBtn = msgbox.querySelector('.el-button--primary')!
+      const error = msgbox.querySelector('.el-message-box__errormsg')!
+
+      expect(inputValidator).toHaveBeenCalledTimes(0)
+      expect(error.textContent).toBe('')
+      confirmBtn.click()
+      await rAF()
+
+      expect(inputValidator).toHaveBeenCalledTimes(1)
+      expect(error.textContent).toBe('error message')
     })
   })
 })
