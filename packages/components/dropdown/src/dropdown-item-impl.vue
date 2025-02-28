@@ -3,7 +3,6 @@
     v-if="divided"
     role="separator"
     :class="ns.bem('menu', 'item', 'divided')"
-    v-bind="$attrs"
   />
   <li
     :ref="itemRef"
@@ -14,18 +13,19 @@
     :role="role"
     @click="(e) => $emit('clickimpl', e)"
     @focus="handleFocus"
-    @keydown="handleKeydown"
+    @keydown.self="handleKeydown"
     @mousedown="handleMousedown"
     @pointermove="(e) => $emit('pointermove', e)"
     @pointerleave="(e) => $emit('pointerleave', e)"
   >
-    <el-icon v-if="icon"><component :is="icon" /></el-icon>
+    <el-icon v-if="icon">
+      <component :is="icon" />
+    </el-icon>
     <slot />
   </li>
 </template>
 
 <script lang="ts">
-// @ts-nocheck
 import { computed, defineComponent, inject } from 'vue'
 import {
   ROVING_FOCUS_GROUP_ITEM_INJECTION_KEY,
@@ -88,8 +88,11 @@ export default defineComponent({
     })
 
     const handleKeydown = composeEventHandlers((e: KeyboardEvent) => {
-      const { code } = e
-      if (code === EVENT_CODE.enter || code === EVENT_CODE.space) {
+      if (
+        [EVENT_CODE.enter, EVENT_CODE.numpadEnter, EVENT_CODE.space].includes(
+          e.code
+        )
+      ) {
         e.preventDefault()
         e.stopImmediatePropagation()
         emit('clickimpl', e)

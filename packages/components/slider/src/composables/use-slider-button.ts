@@ -1,17 +1,17 @@
 import { computed, inject, nextTick, ref, watch } from 'vue'
 import { debounce } from 'lodash-unified'
+import { useEventListener } from '@vueuse/core'
 import { EVENT_CODE, UPDATE_MODEL_EVENT } from '@element-plus/constants'
-import { sliderContextKey } from '@element-plus/tokens'
+import { sliderContextKey } from '../constants'
+
 import type { CSSProperties, ComputedRef, Ref, SetupContext } from 'vue'
-import type { TooltipInstance } from '@element-plus/components/tooltip'
 import type { SliderProps } from '../slider'
 import type {
   SliderButtonEmits,
   SliderButtonInitData,
   SliderButtonProps,
 } from '../button'
-
-const { left, down, right, up, home, end, pageUp, pageDown } = EVENT_CODE
+import type { TooltipInstance } from '@element-plus/components/tooltip'
 
 const useTooltip = (
   props: SliderButtonProps,
@@ -50,7 +50,28 @@ const useTooltip = (
   }
 }
 
-export const useSliderButton = (
+type HTMLType = HTMLDivElement | undefined
+type useSliderButtonType = (
+  props: SliderButtonProps,
+  initData: SliderButtonInitData,
+  emit: SetupContext<SliderButtonEmits>['emit']
+) => {
+  disabled: Ref<boolean>
+  button: Ref<HTMLType>
+  tooltip: Ref<TooltipInstance | undefined>
+  tooltipVisible: Ref<boolean>
+  showTooltip: Ref<SliderProps['showTooltip']>
+  persistent: Ref<SliderProps['persistent']>
+  wrapperStyle: ComputedRef<CSSProperties>
+  formatValue: ComputedRef<number | string>
+  handleMouseEnter: () => void
+  handleMouseLeave: () => void
+  onButtonDown: (event: MouseEvent | TouchEvent) => void
+  onKeyDown: (event: KeyboardEvent) => void
+  setPosition: (newPosition: number) => Promise<void>
+}
+
+export const useSliderButton: useSliderButtonType = (
   props: SliderButtonProps,
   initData: SliderButtonInitData,
   emit: SetupContext<SliderButtonEmits>['emit']
@@ -61,6 +82,7 @@ export const useSliderButton = (
     max,
     step,
     showTooltip,
+    persistent,
     precision,
     sliderSize,
     formatTooltip,
@@ -149,21 +171,33 @@ export const useSliderButton = (
 
   const onKeyDown = (event: KeyboardEvent) => {
     let isPreventDefault = true
-    if ([left, down].includes(event.key)) {
-      onLeftKeyDown()
-    } else if ([right, up].includes(event.key)) {
-      onRightKeyDown()
-    } else if (event.key === home) {
-      onHomeKeyDown()
-    } else if (event.key === end) {
-      onEndKeyDown()
-    } else if (event.key === pageDown) {
-      onPageDownKeyDown()
-    } else if (event.key === pageUp) {
-      onPageUpKeyDown()
-    } else {
-      isPreventDefault = false
+
+    switch (event.code) {
+      case EVENT_CODE.left:
+      case EVENT_CODE.down:
+        onLeftKeyDown()
+        break
+      case EVENT_CODE.right:
+      case EVENT_CODE.up:
+        onRightKeyDown()
+        break
+      case EVENT_CODE.home:
+        onHomeKeyDown()
+        break
+      case EVENT_CODE.end:
+        onEndKeyDown()
+        break
+      case EVENT_CODE.pageDown:
+        onPageDownKeyDown()
+        break
+      case EVENT_CODE.pageUp:
+        onPageUpKeyDown()
+        break
+      default:
+        isPreventDefault = false
+        break
     }
+
     isPreventDefault && event.preventDefault()
   }
 
@@ -228,8 +262,8 @@ export const useSliderButton = (
         }
         if (!initData.isClick) {
           setPosition(initData.newPosition)
-          emitChange()
         }
+        emitChange()
       }, 0)
       window.removeEventListener('mousemove', onDragging)
       window.removeEventListener('touchmove', onDragging)
@@ -251,7 +285,10 @@ export const useSliderButton = (
     let value =
       steps * lengthPerStep * (max.value - min.value) * 0.01 + min.value
     value = Number.parseFloat(value.toFixed(precision.value))
-    emit(UPDATE_MODEL_EVENT, value)
+
+    if (value !== props.modelValue) {
+      emit(UPDATE_MODEL_EVENT, value)
+    }
 
     if (!initData.dragging && props.modelValue !== initData.oldValue) {
       initData.oldValue = props.modelValue
@@ -259,7 +296,7 @@ export const useSliderButton = (
 
     await nextTick()
     initData.dragging && displayTooltip()
-    tooltip.value.updatePopper()
+    tooltip.value!.updatePopper()
   }
 
   watch(
@@ -269,11 +306,15 @@ export const useSliderButton = (
     }
   )
 
+  useEventListener(button, 'touchstart', onButtonDown, { passive: false })
+
   return {
+    disabled,
     button,
     tooltip,
     tooltipVisible,
     showTooltip,
+    persistent,
     wrapperStyle,
     formatValue,
     handleMouseEnter,

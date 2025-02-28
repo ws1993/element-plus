@@ -1,17 +1,16 @@
-// @ts-nocheck
 import { nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { describe, expect, test } from 'vitest'
 import ElTag from '@element-plus/components/tag'
-import ElDescriptions from '../src/index.vue'
+import ElDescriptions from '../src/description.vue'
 import ElDescriptionsItem from '../src/description-item'
 
 describe('Descriptions.vue', () => {
   test('render test', () => {
     const wrapper = mount(() => (
       <ElDescriptions title="title" extra="extra">
-        {Array.from({ length: 4 }).map(() => (
-          <ElDescriptionsItem />
+        {Array.from({ length: 4 }).map((_, index) => (
+          <ElDescriptionsItem label={String(index)} />
         ))}
       </ElDescriptions>
     ))
@@ -19,6 +18,20 @@ describe('Descriptions.vue', () => {
     expect(wrapper.find('.el-descriptions__title').text()).toEqual('title')
     expect(wrapper.find('.el-descriptions__extra').text()).toEqual('extra')
     expect(wrapper.findAll('.el-descriptions__label').length).toEqual(4)
+    expect(wrapper.findAll('.el-descriptions__content').length).toEqual(4)
+  })
+
+  test('render empty label', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions>
+        {Array.from({ length: 3 }).map(() => (
+          <ElDescriptionsItem />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(wrapper.findAll('.el-descriptions__label').length).toEqual(0)
+    expect(wrapper.findAll('.el-descriptions__content').length).toEqual(3)
   })
 
   test('should render border props', () => {
@@ -106,7 +119,7 @@ describe('Descriptions.vue', () => {
   })
 
   test('should render direction props', async () => {
-    const direction = ref('horizontal')
+    const direction = ref<'horizontal' | 'vertical'>('horizontal')
 
     const wrapper = mount(() => (
       <ElDescriptions column={5} direction={direction.value} border>
@@ -190,5 +203,116 @@ describe('Descriptions.vue', () => {
     wrapper.find('button').trigger('click')
     await nextTick()
     expect(wrapper.findComponent(ElTag).text()).toBe(CHANGE_VALUE)
+  })
+
+  test('should render labelWidth prop of DescriptionsItem', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions border>
+        {Array.from({ length: 3 }).map(() => (
+          <ElDescriptionsItem label="测试标签" labelWidth="150px" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.find('.el-descriptions__label').attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('should render labelWidth prop of Descriptions', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions label-width="150px" border>
+        {Array.from({ length: 3 }).map(() => (
+          <ElDescriptionsItem label="测试标签" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.find('.el-descriptions__label').attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('should render labelWidth prop of Descriptions and DescriptionsItem with higher priority', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions label-width="100px" border>
+        <ElDescriptionsItem label="测试标签" />
+        {Array.from({ length: 2 }).map(() => (
+          <ElDescriptionsItem label="测试标签" label-width="150px" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.findAll('.el-descriptions__label')[0].attributes('style')
+    ).toContain('width: 100px')
+    expect(
+      wrapper.findAll('.el-descriptions__label')[1].attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('should render labelWidth prop of DescriptionsItem with no border', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions>
+        {Array.from({ length: 3 }).map(() => (
+          <ElDescriptionsItem label="测试标签" labelWidth="150px" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.find('.el-descriptions__label').attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('should render labelWidth prop of Descriptions with no border', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions label-width="150px">
+        {Array.from({ length: 3 }).map(() => (
+          <ElDescriptionsItem label="测试标签" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.find('.el-descriptions__label').attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('should render labelWidth prop of Descriptions and DescriptionsItem with higher priority with no border', () => {
+    const wrapper = mount(() => (
+      <ElDescriptions label-width="100px">
+        <ElDescriptionsItem label="测试标签" />
+        {Array.from({ length: 2 }).map(() => (
+          <ElDescriptionsItem label="测试标签" label-width="150px" />
+        ))}
+      </ElDescriptions>
+    ))
+
+    expect(
+      wrapper.findAll('.el-descriptions__label')[0].attributes('style')
+    ).toContain('width: 100px')
+    expect(
+      wrapper.findAll('.el-descriptions__label')[1].attributes('style')
+    ).toContain('width: 150px')
+  })
+
+  test('render customize functional components', () => {
+    // @ts-expect-error
+    const customComponent = () => {
+      return <ElDescriptionsItem label="label">123</ElDescriptionsItem>
+    }
+    const wrapper = mount(() => (
+      <ElDescriptions title="title" extra="extra">
+        <customComponent />
+        <customComponent />
+        <ElDescriptionsItem label="label">123</ElDescriptionsItem>
+      </ElDescriptions>
+    ))
+
+    expect(wrapper.find('.el-descriptions__title').text()).toEqual('title')
+    expect(wrapper.find('.el-descriptions__extra').text()).toEqual('extra')
+    expect(wrapper.findAll('.el-descriptions__label').length).toEqual(3)
+    expect(wrapper.findAll('.el-descriptions__content').length).toEqual(3)
   })
 })

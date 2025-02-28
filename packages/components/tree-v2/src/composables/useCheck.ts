@@ -4,6 +4,7 @@ import {
   NODE_CHECK_CHANGE,
   SetOperationEnum,
 } from '../virtual-tree'
+import type { CheckboxValueType } from '@element-plus/components/checkbox'
 import type { Ref } from 'vue'
 import type { Tree, TreeKey, TreeNode, TreeNodeData, TreeProps } from '../types'
 
@@ -13,7 +14,7 @@ export function useCheck(props: TreeProps, tree: Ref<Tree | undefined>) {
   const { emit } = getCurrentInstance()!
 
   watch(
-    () => tree.value,
+    [() => tree.value, () => props.defaultCheckedKeys],
     () => {
       return nextTick(() => {
         _setCheckedKeys(props.defaultCheckedKeys)
@@ -78,11 +79,12 @@ export function useCheck(props: TreeProps, tree: Ref<Tree | undefined>) {
 
   const toggleCheckbox = (
     node: TreeNode,
-    isChecked: boolean,
-    nodeClick = true
+    isChecked: CheckboxValueType,
+    nodeClick = true,
+    immediateUpdate = true
   ) => {
     const checkedKeySet = checkedKeys.value
-    const toggle = (node: TreeNode, checked: boolean) => {
+    const toggle = (node: TreeNode, checked: CheckboxValueType) => {
       checkedKeySet[checked ? SetOperationEnum.ADD : SetOperationEnum.DELETE](
         node.key
       )
@@ -96,13 +98,15 @@ export function useCheck(props: TreeProps, tree: Ref<Tree | undefined>) {
       }
     }
     toggle(node, isChecked)
-    updateCheckedKeys()
+    if (immediateUpdate) {
+      updateCheckedKeys()
+    }
     if (nodeClick) {
       afterNodeCheck(node, isChecked)
     }
   }
 
-  const afterNodeCheck = (node: TreeNode, checked: boolean) => {
+  const afterNodeCheck = (node: TreeNode, checked: CheckboxValueType) => {
     const { checkedNodes, checkedKeys } = getChecked()
     const { halfCheckedNodes, halfCheckedKeys } = getHalfChecked()
     emit(NODE_CHECK, node.data, {
@@ -178,7 +182,9 @@ export function useCheck(props: TreeProps, tree: Ref<Tree | undefined>) {
   function setCheckedKeys(keys: TreeKey[]) {
     checkedKeys.value.clear()
     indeterminateKeys.value.clear()
-    _setCheckedKeys(keys)
+    nextTick(() => {
+      _setCheckedKeys(keys)
+    })
   }
 
   function setChecked(key: TreeKey, isChecked: boolean) {
@@ -193,13 +199,14 @@ export function useCheck(props: TreeProps, tree: Ref<Tree | undefined>) {
   function _setCheckedKeys(keys: TreeKey[]) {
     if (tree?.value) {
       const { treeNodeMap } = tree.value
-      if (props.showCheckbox && treeNodeMap && keys) {
+      if (props.showCheckbox && treeNodeMap && keys?.length > 0) {
         for (const key of keys) {
           const node = treeNodeMap.get(key)
           if (node && !isChecked(node)) {
-            toggleCheckbox(node, true, false)
+            toggleCheckbox(node, true, false, false)
           }
         }
+        updateCheckedKeys()
       }
     }
   }

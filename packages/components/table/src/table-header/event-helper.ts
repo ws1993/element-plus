@@ -1,7 +1,13 @@
 // @ts-nocheck
 import { getCurrentInstance, inject, ref } from 'vue'
-import { isClient } from '@vueuse/core'
-import { addClass, hasClass, removeClass } from '@element-plus/utils'
+import { isNull } from 'lodash-unified'
+import {
+  addClass,
+  hasClass,
+  isClient,
+  isElement,
+  removeClass,
+} from '@element-plus/utils'
 import { TABLE_INJECTION_KEY } from '../tokens'
 import type { TableHeaderProps } from '.'
 import type { TableColumnCtx } from '../table-column/defaults'
@@ -110,18 +116,21 @@ function useEvent<T>(props: TableHeaderProps<T>, emit) {
 
   const handleMouseMove = (event: MouseEvent, column: TableColumnCtx<T>) => {
     if (column.children && column.children.length > 0) return
-    let target = event.target as HTMLElement
-    while (target && target.tagName !== 'TH') {
-      target = target.parentNode as HTMLElement
+    const el = event.target as HTMLElement
+    if (!isElement(el)) {
+      return
     }
+    const target = el?.closest('th')
 
-    if (!column || !column.resizable) return
+    if (!column || !column.resizable || !target) return
 
     if (!dragging.value && props.border) {
       const rect = target.getBoundingClientRect()
 
       const bodyStyle = document.body.style
-      if (rect.width > 12 && rect.right - event.pageX < 8) {
+      const isLastTh = target.parentNode?.lastElementChild === target
+      const allowDarg = props.allowDragLastColumn || !isLastTh
+      if (rect.width > 12 && rect.right - event.clientX < 8 && allowDarg) {
         bodyStyle.cursor = 'col-resize'
         if (hasClass(target, 'is-sortable')) {
           target.style.cursor = 'col-resize'
@@ -154,13 +163,9 @@ function useEvent<T>(props: TableHeaderProps<T>, emit) {
     event.stopPropagation()
     const order =
       column.order === givenOrder ? null : givenOrder || toggleOrder(column)
+    const target = (event.target as HTMLElement)?.closest('th')
 
-    let target = event.target as HTMLElement
-    while (target && target.tagName !== 'TH') {
-      target = target.parentNode as HTMLElement
-    }
-
-    if (target && target.tagName === 'TH') {
+    if (target) {
       if (hasClass(target, 'noclick')) {
         removeClass(target, 'noclick')
         return
@@ -169,6 +174,16 @@ function useEvent<T>(props: TableHeaderProps<T>, emit) {
 
     if (!column.sortable) return
 
+    const clickTarget = event.currentTarget
+
+    if (
+      ['ascending', 'descending'].some(
+        (str) => hasClass(clickTarget, str) && !column.sortOrders.includes(str)
+      )
+    ) {
+      return
+    }
+
     const states = props.store.states
     let sortProp = states.sortProp.value
     let sortOrder
@@ -176,7 +191,7 @@ function useEvent<T>(props: TableHeaderProps<T>, emit) {
 
     if (
       sortingColumn !== column ||
-      (sortingColumn === column && sortingColumn.order === null)
+      (sortingColumn === column && isNull(sortingColumn.order))
     ) {
       if (sortingColumn) {
         sortingColumn.order = null

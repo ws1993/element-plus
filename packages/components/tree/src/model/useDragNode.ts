@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { provide, ref } from 'vue'
-import { addClass, removeClass } from '@element-plus/utils'
+import { addClass, isFunction, removeClass } from '@element-plus/utils'
 import { useNamespace } from '@element-plus/hooks'
 import type { InjectionKey } from 'vue'
 import type Node from './node'
+import type { NodeDropType } from '../tree.type'
 
 interface TreeNode {
   node: Node
@@ -34,10 +35,7 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
   })
 
   const treeNodeDragStart = ({ event, treeNode }: DragOptions) => {
-    if (
-      typeof props.allowDrag === 'function' &&
-      !props.allowDrag(treeNode.node)
-    ) {
+    if (isFunction(props.allowDrag) && !props.allowDrag(treeNode.node)) {
       event.preventDefault()
       return false
     }
@@ -56,7 +54,7 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
   const treeNodeDragOver = ({ event, treeNode }: DragOptions) => {
     const dropNode = treeNode
     const oldDropNode = dragState.value.dropNode
-    if (oldDropNode && oldDropNode !== dropNode) {
+    if (oldDropNode && oldDropNode.node.id !== dropNode.node.id) {
       removeClass(oldDropNode.$el, ns.is('drop-inner'))
     }
     const draggingNode = dragState.value.draggingNode
@@ -66,7 +64,7 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
     let dropInner = true
     let dropNext = true
     let userAllowDropInner = true
-    if (typeof props.allowDrop === 'function') {
+    if (isFunction(props.allowDrop)) {
       dropPrev = props.allowDrop(draggingNode.node, dropNode.node, 'prev')
       userAllowDropInner = dropInner = props.allowDrop(
         draggingNode.node,
@@ -77,7 +75,10 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
     }
     event.dataTransfer.dropEffect =
       dropInner || dropPrev || dropNext ? 'move' : 'none'
-    if ((dropPrev || dropInner || dropNext) && oldDropNode !== dropNode) {
+    if (
+      (dropPrev || dropInner || dropNext) &&
+      oldDropNode?.node.id !== dropNode.node.id
+    ) {
       if (oldDropNode) {
         ctx.emit('node-drag-leave', draggingNode.node, oldDropNode.node, event)
       }
@@ -86,6 +87,9 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
 
     if (dropPrev || dropInner || dropNext) {
       dragState.value.dropNode = dropNode
+    } else {
+      // Reset dragState.value.dropNode to null when allowDrop is transfer from true to false.(For issue #14704)
+      dragState.value.dropNode = null
     }
 
     if (dropNode.node.nextSibling === draggingNode.node) {
@@ -106,10 +110,13 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
       dropNext = false
     }
 
-    const targetPosition = dropNode.$el.getBoundingClientRect()
+    // find target node without children, just calc content node height
+    const targetPosition = dropNode.$el
+      .querySelector(`.${ns.be('node', 'content')}`)
+      .getBoundingClientRect()
     const treePosition = el$.value.getBoundingClientRect()
 
-    let dropType
+    let dropType: NodeDropType
     const prevPercent = dropPrev ? (dropInner ? 0.25 : dropNext ? 0.45 : 1) : -1
     const nextPercent = dropNext ? (dropInner ? 0.75 : dropPrev ? 0.55 : 0) : 1
 
@@ -154,7 +161,11 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
   const treeNodeDragEnd = (event: DragEvent) => {
     const { draggingNode, dropType, dropNode } = dragState.value
     event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
+
+    // https://bugzilla.mozilla.org/show_bug.cgi?id=1911486
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move'
+    }
 
     if (draggingNode && dropNode) {
       const draggingNodeCopy = { data: draggingNode.node.data }
@@ -170,6 +181,15 @@ export function useDragNodeHandler({ props, ctx, el$, dropIndicator$, store }) {
       }
       if (dropType !== 'none') {
         store.value.registerNode(draggingNodeCopy)
+        if (store.value.key) {
+          //restore checkbox state after dragging
+          draggingNode.node.eachNode((node) => {
+            store.value.nodesMap[node.data[store.value.key]]?.setChecked(
+              node.checked,
+              !store.value.checkStrictly
+            )
+          })
+        }
       }
 
       removeClass(dropNode.$el, ns.is('drop-inner'))

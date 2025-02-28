@@ -1,4 +1,5 @@
 import { buildProps, definePropType, mutable } from '@element-plus/utils'
+import { componentSizes } from '@element-plus/constants'
 import type { ExtractPropTypes } from 'vue'
 import type Sizes from './sizes.vue'
 
@@ -15,10 +16,12 @@ export const paginationSizesProps = buildProps({
     type: String,
   },
   disabled: Boolean,
+  teleported: Boolean,
   size: {
     type: String,
-    default: 'default',
+    values: componentSizes,
   },
+  appendSizeTo: String,
 } as const)
 
 export type PaginationSizesProps = ExtractPropTypes<typeof paginationSizesProps>

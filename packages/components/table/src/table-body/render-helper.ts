@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { computed, h, inject } from 'vue'
+import { merge } from 'lodash-unified'
 import { useNamespace } from '@element-plus/hooks'
+import { isBoolean, isPropAbsent } from '@element-plus/utils'
 import { getRowIdentity } from '../util'
 import { TABLE_INJECTION_KEY } from '../tokens'
 import useEvents from './events-helper'
 import useStyles from './styles-helper'
+import TdWrapper from './td-wrapper.vue'
 import type { TableBodyProps } from './defaults'
 import type { RenderRowData, TableProps, TreeNode } from '../table/defaults'
 
@@ -48,7 +51,7 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
     treeRowData?: TreeNode,
     expanded = false
   ) => {
-    const { tooltipEffect, store } = props
+    const { tooltipEffect, tooltipOptions, store } = props
     const { indent, columns } = store.states
     const rowClasses = getRowClass(row, $index)
     let display = true
@@ -78,7 +81,7 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
         if (!rowspan || !colspan) {
           return null
         }
-        const columnData = { ...column }
+        const columnData = Object.assign({}, column)
         columnData.realWidth = getColspanRealWidth(
           columns.value,
           colspan,
@@ -98,7 +101,7 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
             indent: treeRowData.level * indent.value,
             level: treeRowData.level,
           }
-          if (typeof treeRowData.expanded === 'boolean') {
+          if (isBoolean(treeRowData.expanded)) {
             data.treeNode.expanded = treeRowData.expanded
             // 表明是懒加载
             if ('loading' in treeRowData) {
@@ -109,22 +112,32 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
             }
           }
         }
-        const baseKey = `${$index},${cellIndex}`
+        const baseKey = `${getKeyOfRow(row, $index)},${cellIndex}`
         const patchKey = columnData.columnKey || columnData.rawColumnKey || ''
-        const tdChildren = cellChildren(cellIndex, column, data)
+        const mergedTooltipOptions =
+          column.showOverflowTooltip &&
+          merge(
+            {
+              effect: tooltipEffect,
+            },
+            tooltipOptions,
+            column.showOverflowTooltip
+          )
         return h(
-          'td',
+          TdWrapper,
           {
             style: getCellStyle($index, cellIndex, row, column),
-            class: getCellClass($index, cellIndex, row, column),
+            class: getCellClass($index, cellIndex, row, column, colspan - 1),
             key: `${patchKey}${baseKey}`,
             rowspan,
             colspan,
             onMouseenter: ($event) =>
-              handleCellMouseEnter($event, { ...row, tooltipEffect }),
+              handleCellMouseEnter($event, row, mergedTooltipOptions),
             onMouseleave: handleCellMouseLeave,
           },
-          [tdChildren]
+          {
+            default: () => cellChildren(cellIndex, column, data),
+          }
         )
       })
     )
@@ -164,7 +177,7 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
                   'td',
                   {
                     colspan: columns.length,
-                    class: 'el-table__cell el-table__expanded-cell',
+                    class: `${ns.e('cell')} ${ns.e('expanded-cell')}`,
                   },
                   [renderExpanded({ row, $index, store, expanded })]
                 ),
@@ -190,8 +203,8 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
           level: cur.level,
           display: true,
         }
-        if (typeof cur.lazy === 'boolean') {
-          if (typeof cur.loaded === 'boolean' && cur.loaded) {
+        if (isBoolean(cur.lazy)) {
+          if (isBoolean(cur.loaded) && cur.loaded) {
             treeRowData.noLazyChildren = !(cur.children && cur.children.length)
           }
           treeRowData.loading = cur.loading
@@ -214,7 +227,7 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
               loading: false,
             }
             const childKey = getRowIdentity(node, rowKey.value)
-            if (childKey === undefined || childKey === null) {
+            if (isPropAbsent(childKey)) {
               throw new Error('For nested data item, row-key is required.')
             }
             cur = { ...treeData.value[childKey] }
@@ -226,8 +239,8 @@ function useRender<T>(props: Partial<TableBodyProps<T>>) {
               // 懒加载的某些节点，level 未知
               cur.level = cur.level || innerTreeRowData.level
               cur.display = !!(cur.expanded && innerTreeRowData.display)
-              if (typeof cur.lazy === 'boolean') {
-                if (typeof cur.loaded === 'boolean' && cur.loaded) {
+              if (isBoolean(cur.lazy)) {
+                if (isBoolean(cur.loaded) && cur.loaded) {
                   innerTreeRowData.noLazyChildren = !(
                     cur.children && cur.children.length
                   )
